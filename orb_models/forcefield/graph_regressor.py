@@ -129,7 +129,7 @@ class NodeHead(torch.nn.Module):
             target: either the name of a PropertyDefinition or a PropertyDefinition itself.
             dropout: The level of dropout to apply.
             remove_mean: Whether to remove the mean of the node features.
-            remove_torque_for_nonpbc_systems: Whether to remove net torque from the 
+            remove_torque_for_nonpbc_systems: Whether to remove net torque from the
                 force predictions for non-PBC systems.
         """
         super().__init__()
@@ -735,6 +735,7 @@ def cross_entropy_loss(
         },
     )
 
+
 def selectively_remove_net_torque_for_nonpbc_systems(
     pred: torch.Tensor,
     positions: torch.Tensor,
@@ -749,7 +750,12 @@ def selectively_remove_net_torque_for_nonpbc_systems(
         cell: The cell of shape (n_batch, 3, 3).
         n_node: The number of nodes per graph, of shape (n_batch,).
     """
-    nopbc_graph = torch.all(cell == 0.0, dim=(1, 2))
+    try:
+        nopbc_graph = torch.all(cell == 0.0, dim=(1, 2))
+    except TypeError:
+        # dim=(1, 2) only allowed in pytorch>=2.2
+        # the below is compatible with pytorch 1.13
+        nopbc_graph = torch.all(torch.all(cell == 0.0, dim=2), dim=1)
     if torch.any(nopbc_graph):
         if torch.all(nopbc_graph):
             pred = remove_net_torque(positions, pred, n_node)
