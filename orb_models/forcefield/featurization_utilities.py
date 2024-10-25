@@ -5,8 +5,13 @@ from typing import Callable, Optional, Tuple, Union
 import numpy as np
 import torch
 
-# TODO(Mark): Make pynanoflann optional
-from pynanoflann import KDTree as NanoKDTree
+try:
+    from pynanoflann import KDTree as NanoKDTree
+
+    _has_pynanoflann = True
+except ImportError:
+    _has_pynanoflann = False
+
 from scipy.spatial import KDTree as SciKDTree
 
 DistanceFeaturizer = Callable[[torch.Tensor], torch.Tensor]
@@ -219,7 +224,7 @@ def compute_pbc_radius_graph(
     radius: Union[float, torch.Tensor],
     max_number_neighbors: int = 20,
     brute_force: Optional[bool] = None,
-    library: str = "pynanoflann",
+    library: Optional[str] = None,
     n_workers: int = 1,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Computes periodic condition radius graph from positions.
@@ -232,7 +237,8 @@ def compute_pbc_radius_graph(
         brute_force (bool, optional): Whether to use brute force knn. Defaults to None, in which case brute_force
             is used if GPU is available (2-6x faster), but not on CPU (1.5x faster - 4x slower, depending on
             system size).
-        library (str, optional): The KDTree library to use. Currently, either 'scipy' or 'pynanoflann'.
+        library (str, optional): The KDTree library to use. Currently, either 'scipy', 'pynanoflann'. If None:
+            use pynanoflann if available, fall back to scipy.
         n_workers (int, optional): The number of workers to use for KDTree construction. Defaults to 1.
 
     Returns:
@@ -250,6 +256,15 @@ def compute_pbc_radius_graph(
         periodic_boundaries = periodic_boundaries.to(device)
 
     device = positions.device
+
+    if library is None:
+        if _has_pynanoflann:
+            library = "pynanoflann"
+        else:
+            library = "scipy"
+
+    if library == "pynanoflann" and not _has_pynanoflann:
+        raise ModuleNotFoundError("Could not import pynanoflann")
 
     if torch.any(periodic_boundaries != 0.0):
         # Shape (num_positions, 27, 3)
